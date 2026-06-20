@@ -552,6 +552,47 @@ function loadData() {
   }
 }
 
+// ==========================================
+// 📊 KPI Rendering
+// ==========================================
+function renderKPIs(data) {
+  // Total Projects
+  const totalProjects = data.length;
+  document.getElementById('kpi-total-projects').textContent = totalProjects;
+
+  // Status breakdown
+  const statusCounts = { 'ยังไม่ดำเนินการ': 0, 'อยู่ระหว่างดำเนินการ': 0, 'ดำเนินการแล้ว': 0 };
+  data.forEach(item => {
+    const status = item['สถานะ'];
+    if (statusCounts.hasOwnProperty(status)) {
+      statusCounts[status]++;
+    } else {
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    }
+  });
+  const statusDesc = `เสร็จสิ้น: ${statusCounts['ดำเนินการแล้ว']} | กำลังทำ: ${statusCounts['อยู่ระหว่างดำเนินการ']} | ยังไม่เริ่ม: ${statusCounts['ยังไม่ดำเนินการ']}`;
+  document.getElementById('kpi-project-split').textContent = statusDesc;
+
+  // Budget totals
+  let totalBudget = 0, totalSpent = 0, totalRemaining = 0;
+  data.forEach(item => {
+    totalBudget += Number(item['งบประมาณ'] || 0);
+    totalSpent += Number(item['ใช้ไปแล้ว'] || 0);
+    totalRemaining += Number(item['คงเหลือ'] || 0);
+  });
+
+  const formatCurrency = val => '฿' + Number(val).toLocaleString('th-TH', { minimumFractionDigits: 0 });
+  document.getElementById('kpi-total-budget').textContent = formatCurrency(totalBudget);
+  document.getElementById('kpi-total-spent').textContent = formatCurrency(totalSpent);
+  document.getElementById('kpi-total-remaining').textContent = formatCurrency(totalRemaining);
+
+  // Percentages
+  const spentPercent = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
+  const remainingPercent = totalBudget > 0 ? (totalRemaining / totalBudget) * 100 : 0;
+  document.getElementById('kpi-spent-percent').textContent = `คิดเป็น ${spentPercent.toFixed(2)}% ของงบทั้งหมด`;
+  document.getElementById('kpi-remaining-percent').textContent = `คงเหลือ ${remainingPercent.toFixed(2)}% สำหรับดำเนินงาน`;
+}
+
 // Populate Project Dropdown in Upload Panel
 function populateUploadProjectSelect(data) {
   const projectSelect = document.getElementById('doc-project-select');
