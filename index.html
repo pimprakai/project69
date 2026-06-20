@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard ติดตามโครงการ - โรงเรียนบ้านป่าถั่ว</title>
+  <!-- Google Fonts: Prompt -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="container header-container">
+      <div class="brand-section">
+        <div class="logo-container">
+          <i class="fa-solid fa-graduation-cap"></i>
+        </div>
+        <div class="title-container">
+          <h1>ระบบติดตามแผนงานโครงการสำหรับผู้บริหาร</h1>
+          <p>โรงเรียนบ้านป่าถั่ว สังกัดสำนักงานเขตพื้นที่การศึกษาประถมศึกษากำแพงเพชร เขต 1</p>
+        </div>
+      </div>
+      <div class="header-controls">
+        <div class="sync-status">
+          <span id="sync-text"><i class="fa-solid fa-cloud-arrow-down"></i> กำลังโหลดข้อมูล...</span>
+          <span id="last-updated" style="font-size: 0.75rem;">อัปเดตล่าสุด: -</span>
+        </div>
+        <button id="refresh-btn" class="btn" title="รีเฟรชข้อมูลสดจาก Google Sheet">
+          <i id="refresh-icon" class="fa-solid fa-arrows-rotate"></i> รีเฟรชข้อมูล
+        </button>
+        <button id="theme-toggle" class="btn-primary btn" title="สลับโหมด มืด/สว่าง">
+          <i id="theme-icon" class="fa-solid fa-moon"></i> โหมดกลางคืน
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="container">
+    
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-container">
+      <div class="spinner"></div>
+      <p style="font-weight: 500;">กำลังดึงข้อมูลโครงการล่าสุดจาก Google Sheet...</p>
+    </div>
+
+    <!-- Dashboard Content (hidden during initial load) -->
+    <div id="dashboard-content" class="dashboard-grid" style="display: none;">
+      
+      <!-- KPI Summary Cards Grid -->
+      <section class="kpi-grid">
+        
+        <!-- Total Projects Card -->
+        <div class="kpi-card primary">
+          <div class="kpi-header">
+            <span class="kpi-title">โครงการทั้งหมด</span>
+            <div class="kpi-icon">
+              <i class="fa-solid fa-folder-open"></i>
+            </div>
+          </div>
+          <div>
+            <div class="kpi-value" id="kpi-total-projects">0</div>
+            <div class="kpi-desc" id="kpi-project-split">เสร็จสิ้น: 0 | กำลังทำ: 0 | ยังไม่เริ่ม: 0</div>
+          </div>
+        </div>
+
+        <!-- Total Budget Card -->
+        <div class="kpi-card info">
+          <div class="kpi-header">
+            <span class="kpi-title">งบประมาณจัดสรรรวม</span>
+            <div class="kpi-icon">
+              <i class="fa-solid fa-wallet"></i>
+            </div>
+          </div>
+          <div>
+            <div class="kpi-value" id="kpi-total-budget">฿0</div>
+            <div class="kpi-desc">งบประมาณตามแผนปฏิบัติการ</div>
+          </div>
+        </div>
+
+        <!-- Total Spent Card -->
+        <div class="kpi-card warning">
+          <div class="kpi-header">
+            <span class="kpi-title">งบประมาณเบิกจ่ายแล้ว</span>
+            <div class="kpi-icon">
+              <i class="fa-solid fa-money-bill-wave"></i>
+            </div>
+          </div>
+          <div>
+            <div class="kpi-value" id="kpi-total-spent">฿0</div>
+            <div class="kpi-desc" id="kpi-spent-percent">คิดเป็น 0.00% ของงบทั้งหมด</div>
+          </div>
+        </div>
+
+        <!-- Total Remaining Card -->
+        <div class="kpi-card success">
+          <div class="kpi-header">
+            <span class="kpi-title">งบประมาณคงเหลือ</span>
+            <div class="kpi-icon">
+              <i class="fa-solid fa-piggy-bank"></i>
+            </div>
+          </div>
+          <div>
+            <div class="kpi-value" id="kpi-total-remaining">฿0</div>
+            <div class="kpi-desc" id="kpi-remaining-percent">คงเหลือ 100.00% สำหรับดำเนินงาน</div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Charts Row -->
+      <section class="charts-grid">
+        
+        <!-- Project Status Doughnut Chart -->
+        <div class="chart-card">
+          <div class="chart-title">
+            <span><i class="fa-solid fa-chart-pie"></i> สัดส่วนสถานะโครงการ</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="statusChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Budget vs Expense by Department Bar Chart -->
+        <div class="chart-card">
+          <div class="chart-title">
+            <span><i class="fa-solid fa-chart-column"></i> เปรียบเทียบงบประมาณรายกลุ่มงาน (บาท)</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="departmentChart"></canvas>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Table Section -->
+      <section class="table-card">
+        
+        <!-- Filter and Search Bar -->
+        <div class="filter-bar">
+          <div class="search-wrapper">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="search-input" class="search-input" placeholder="ค้นหาตามรหัส, ชื่อโครงการ, หรือผู้รับผิดชอบ...">
+          </div>
+          
+          <div class="filter-controls">
+            <select id="group-filter" class="filter-select">
+              <option value="all">ทุกกลุ่มงาน (ทั้งหมด)</option>
+              <!-- Dynamically populated -->
+            </select>
+            
+            <select id="status-filter" class="filter-select">
+              <option value="all">ทุกสถานะ (ทั้งหมด)</option>
+              <option value="ยังไม่ดำเนินการ">ยังไม่ดำเนินการ</option>
+              <option value="อยู่ระหว่างดำเนินการ">อยู่ระหว่างดำเนินการ</option>
+              <option value="ดำเนินการแล้ว">ดำเนินการแล้ว</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Projects Table -->
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th onclick="sortTable('รหัสโครงการ')">รหัส <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th onclick="sortTable('ชื่อโครงการ')">ชื่อโครงการ <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th onclick="sortTable('กลุ่มงาน')">กลุ่มงาน <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th onclick="sortTable('ผู้รับผิดชอบ')">ผู้รับผิดชอบ <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th onclick="sortTable('งบประมาณ')">งบประมาณ <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th onclick="sortTable('ใช้ไปแล้ว')">ใช้ไปแล้ว <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th onclick="sortTable('คงเหลือ')">คงเหลือ <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th onclick="sortTable('ความคืบหน้า')">ความคืบหน้า <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th onclick="sortTable('สถานะ')">สถานะ <i class="fa-solid fa-sort sort-icon"></i></th>
+              </tr>
+            </thead>
+            <tbody id="projects-table-body">
+              <!-- Dynamically populated rows -->
+            </tbody>
+          </table>
+        </div>
+
+      </section>
+
+    </div>
+
+  </main>
+
+  <!-- Project Details Modal -->
+  <div id="project-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-project-name">รายละเอียดโครงการ</h2>
+        <button id="modal-close" class="close-btn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        
+        <div class="modal-grid">
+          <div class="modal-item">
+            <span class="modal-label">รหัสโครงการ</span>
+            <span class="modal-value" id="modal-project-id">-</span>
+          </div>
+          <div class="modal-item">
+            <span class="modal-label">กลุ่มงาน</span>
+            <span class="modal-value" id="modal-project-group">-</span>
+          </div>
+          <div class="modal-item">
+            <span class="modal-label">ผู้รับผิดชอบโครงการ</span>
+            <span class="modal-value" id="modal-project-owner">-</span>
+          </div>
+          <div class="modal-item">
+            <span class="modal-label">สถานะปัจจุบัน</span>
+            <span id="modal-project-status">-</span>
+          </div>
+        </div>
+
+        <div class="modal-divider"></div>
+
+        <div class="modal-grid">
+          <div class="modal-item">
+            <span class="modal-label">งบประมาณจัดสรร</span>
+            <span class="modal-value" id="modal-project-budget" style="color: var(--primary);">฿0</span>
+          </div>
+          <div class="modal-item">
+            <span class="modal-label">ความคืบหน้าโครงการ</span>
+            <span class="modal-value" id="modal-project-progress-text">0.00%</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 0.5rem; margin-bottom: 1.5rem;">
+          <div class="progress-bar-bg" style="height: 12px;">
+            <div id="modal-project-progress-fill" class="progress-bar-fill" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <div class="modal-divider"></div>
+
+        <!-- Budget breakdown comparison graphics -->
+        <div class="budget-comparison">
+          <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem;"><i class="fa-solid fa-chart-pie"></i> รายละเอียดเบิกจ่ายงบประมาณ</h4>
+          <div class="budget-bar">
+            <div id="modal-budget-spent" class="budget-spent-fill" style="width: 0%">0%</div>
+            <div id="modal-budget-remain" class="budget-remain-fill" style="width: 100%">100%</div>
+          </div>
+          <div class="budget-legend">
+            <div class="legend-item">
+              <span class="legend-color" style="background: linear-gradient(90deg, var(--primary), var(--info));"></span>
+              <span id="modal-spent-legend-text">ใช้ไปแล้ว: ฿0 (0%)</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color" style="background-color: var(--success);"></span>
+              <span id="modal-remain-legend-text">คงเหลือ: ฿0 (100%)</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button id="modal-close-btn" class="btn btn-primary">ปิดหน้าต่าง</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>© 2026 ระบบสารสนเทศเพื่อการบริหาร โรงเรียนบ้านป่าถั่ว สังกัด สพป.กำแพงเพชร เขต 1 | แหล่งข้อมูล: <a href="https://docs.google.com/spreadsheets/d/1549_DZM4EcJ-XBeWTvFzMziY1sn4rUz_fqYvpz58DBI/edit?usp=sharing" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-file-excel"></i> Google Sheets ต้นทาง</a></p>
+    </div>
+  </footer>
+
+  <!-- Custom JavaScript -->
+  <script src="app.js"></script>
+</body>
+</html>
