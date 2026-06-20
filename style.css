@@ -97,6 +97,7 @@ body {
 }
 
 /* Header Section */
+
 header {
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
@@ -181,6 +182,20 @@ header {
   background-color: var(--primary);
   color: var(--bg-secondary);
   border-color: var(--primary);
+}
+
+/* Error panel styling */
+.error-panel {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: var(--card-shadow);
+  padding: 2.5rem;
+  max-width: 480px;
+  margin: 0 auto;
+  text-align: center;
+}
+
 }
 
 .btn-primary:hover {
