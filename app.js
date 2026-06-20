@@ -14,18 +14,84 @@ const themeToggleBtn = document.getElementById('theme-toggle');
 const themeIcon = document.getElementById('theme-icon');
 
 // Google Sheet URL (JSONP Format Endpoint)
-// We request via JSONP because it completely bypasses CORS and works when opened directly via file://
 const SPREADSHEET_ID = '1549_DZM4EcJ-XBeWTvFzMziY1sn4rUz_fqYvpz58DBI';
 const SPREADSHEET_JSONP_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=responseHandler:handleGoogleSheetResponse`;
+
+// IndexedDB Database Constants
+const DB_NAME = 'BaanPaThuaProcurementDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'documents';
 
 // Initialize Dashboard
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   setupEventListeners();
+  initIndexedDB();
   loadData();
 });
 
-// Theme Initialization & Toggle
+// ==========================================
+// 🏛️ IndexedDB Document Storage Helper
+// ==========================================
+function initIndexedDB() {
+  const request = indexedDB.open(DB_NAME, DB_VERSION);
+  request.onupgradeneeded = (e) => {
+    const db = e.target.result;
+    if (!db.objectStoreNames.contains(STORE_NAME)) {
+      db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+    }
+  };
+}
+
+function getDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onsuccess = (e) => resolve(e.target.result);
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function saveDocument(doc) {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.add(doc);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function getAllDocuments() {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readonly');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function deleteDocument(id) {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function getDocumentsByProject(projectId) {
+  const docs = await getAllDocuments();
+  return docs.filter(doc => doc.projectId === projectId);
+}
+
+// ==========================================
+// 🎨 Theme Initialization & Toggle
+// ==========================================
 function initTheme() {
   const savedTheme = localStorage.getItem('theme') || 'light';
   document.documentElement.setAttribute('data-theme', savedTheme);
@@ -59,7 +125,9 @@ function toggleTheme() {
   }
 }
 
-// Setup Event Listeners
+// ==========================================
+// 📂 Tab Switching & Uploader Event Listeners
+// ==========================================
 function setupEventListeners() {
   // Theme Toggle
   themeToggleBtn.addEventListener('click', toggleTheme);
@@ -67,12 +135,141 @@ function setupEventListeners() {
   // Refresh Button
   document.getElementById('refresh-btn').addEventListener('click', loadData);
   
-  // Filters and Search Input
+  // Filters and Search Input (Dashboard Tab)
   document.getElementById('search-input').addEventListener('input', () => renderTable(windowProjectData));
   document.getElementById('group-filter').addEventListener('change', () => renderTable(windowProjectData));
   document.getElementById('status-filter').addEventListener('change', () => renderTable(windowProjectData));
   
-  // Modal Close
+  // Tab Navigation Links
+  const tabDashboard = document.getElementById('tab-dashboard');
+  const tabDocuments = document.getElementById('tab-documents');
+  const dashboardView = document.getElementById('dashboard-view');
+  const documentsView = document.getElementById('documents-view');
+  
+  tabDashboard.addEventListener('click', () => {
+    tabDashboard.classList.add('active');
+    tabDocuments.classList.remove('active');
+    dashboardView.style.display = 'flex';
+    documentsView.style.display = 'none';
+  });
+  
+  tabDocuments.addEventListener('click', () => {
+    tabDocuments.classList.add('active');
+    tabDashboard.classList.remove('active');
+    documentsView.style.display = 'block';
+    dashboardView.style.display = 'none';
+    renderDocumentsList(); // Refresh documents table
+  });
+
+  // Drag and Drop Zone Interaction
+  const dropzone = document.getElementById('upload-dropzone');
+  const fileInput = document.getElementById('doc-file-input');
+  const fileInfoBanner = document.getElementById('selected-file-info');
+  const fileInfoName = document.getElementById('selected-file-name');
+  const clearFileBtn = document.getElementById('clear-file-btn');
+  const dropzoneIcon = dropzone.querySelector('.dropzone-icon');
+
+  dropzone.addEventListener('click', () => fileInput.click());
+
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('dragover');
+    dropzoneIcon.className = 'fa-solid fa-file-arrow-up dropzone-icon';
+  });
+
+  dropzone.addEventListener('dragleave', () => {
+    dropzone.classList.remove('dragover');
+    dropzoneIcon.className = 'fa-solid fa-file-circle-plus dropzone-icon';
+  });
+
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    dropzoneIcon.className = 'fa-solid fa-file-circle-plus dropzone-icon';
+    if (e.dataTransfer.files.length > 0) {
+      handleFileSelection(e.dataTransfer.files[0]);
+    }
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+      handleFileSelection(e.target.files[0]);
+    }
+  });
+
+  clearFileBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    resetFileSelection();
+  });
+
+  function handleFileSelection(file) {
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      alert('ไม่สามารถอัปโหลดไฟล์ขนาดใหญ่เกิน 10 MB ได้');
+      resetFileSelection();
+      return;
+    }
+    // Update uploader UI
+    fileInput.files = createFileList(file);
+    fileInfoName.textContent = `${file.name} (${formatBytes(file.size)})`;
+    
+    // Choose appropriate file icon
+    const fileIcon = document.getElementById('selected-file-icon');
+    fileIcon.className = getFileIconClass(file.name);
+    
+    dropzone.style.display = 'none';
+    fileInfoBanner.style.display = 'flex';
+  }
+
+  function resetFileSelection() {
+    fileInput.value = '';
+    dropzone.style.display = 'flex';
+    fileInfoBanner.style.display = 'none';
+  }
+
+  // Helper to construct a FileList object
+  function createFileList(file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    return dt.files;
+  }
+
+  // Document Upload Form Submission Handler
+  const uploadForm = document.getElementById('doc-upload-form');
+  uploadForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const projectId = document.getElementById('doc-project-select').value;
+    const file = fileInput.files[0];
+    
+    if (!file) {
+      alert('โปรดเลือกไฟล์ก่อนทำการบันทึก');
+      return;
+    }
+
+    const documentRecord = {
+      name: file.name,
+      type: file.type || 'application/octet-stream',
+      size: file.size,
+      uploadDate: new Date().toISOString(),
+      projectId: projectId,
+      blob: file // Store File object directly as Blob
+    };
+
+    try {
+      await saveDocument(documentRecord);
+      alert('บันทึกและอัปโหลดเอกสารจัดซื้อจัดจ้างสำเร็จ!');
+      resetFileSelection();
+      uploadForm.reset();
+      renderDocumentsList();
+    } catch (error) {
+      console.error(error);
+      alert('เกิดข้อผิดพลาดในการอัปโหลดไฟล์: ' + error.message);
+    }
+  });
+
+  // Procurement Document Table search filter
+  document.getElementById('doc-search-input').addEventListener('input', renderDocumentsList);
+  
+  // Modal Close buttons
   document.getElementById('modal-close').addEventListener('click', closeModal);
   document.getElementById('modal-close-btn').addEventListener('click', closeModal);
   document.getElementById('project-modal').addEventListener('click', (e) => {
@@ -82,7 +279,139 @@ function setupEventListeners() {
   });
 }
 
-// Load Data from Google Sheet using JSONP
+// Format bytes to human readable sizes
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Get FontAwesome icon class depending on file extensions
+function getFileIconClass(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  let color = 'var(--text-secondary)';
+  let icon = 'fa-solid fa-file-lines';
+  
+  if (ext === 'pdf') { icon = 'fa-solid fa-file-pdf'; color = '#d32f2f'; }
+  else if (['doc', 'docx'].includes(ext)) { icon = 'fa-solid fa-file-word'; color = '#1976d2'; }
+  else if (['xls', 'xlsx', 'csv'].includes(ext)) { icon = 'fa-solid fa-file-excel'; color = '#388e3c'; }
+  else if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext)) { icon = 'fa-solid fa-file-image'; color = '#7b1fa2'; }
+  
+  return `${icon}`;
+}
+
+function getFileIconStyle(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  if (ext === 'pdf') return 'color: #d32f2f;';
+  if (['doc', 'docx'].includes(ext)) return 'color: #1976d2;';
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return 'color: #388e3c;';
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext)) return 'color: #7b1fa2;';
+  return 'color: var(--text-secondary);';
+}
+
+// Render Document List Table (Documents Tab)
+async function renderDocumentsList() {
+  const tableBody = document.getElementById('docs-table-body');
+  const searchQuery = document.getElementById('doc-search-input').value.toLowerCase().trim();
+  
+  try {
+    const allDocs = await getAllDocuments();
+    
+    // Filter documents
+    const filteredDocs = allDocs.filter(doc => {
+      const matchesSearch = doc.name.toLowerCase().includes(searchQuery);
+      return matchesSearch;
+    });
+
+    tableBody.innerHTML = '';
+    
+    if (filteredDocs.length === 0) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="5" style="text-align: center; padding: 2.5rem; color: var(--text-secondary);">
+            <i class="fa-solid fa-folder-open" style="font-size: 2rem; margin-bottom: 0.5rem; display: block; opacity: 0.4;"></i>
+            ไม่พบเอกสารจัดซื้อจัดจ้างในคลังระบบ
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    filteredDocs.forEach(doc => {
+      const tr = document.createElement('tr');
+      
+      // Look up associated project name
+      let projectName = 'ทั่วไป (ไม่ระบุโครงการ)';
+      if (doc.projectId !== 'general') {
+        const proj = windowProjectData.find(p => p['รหัสโครงการ'] === doc.projectId);
+        projectName = proj ? `[${doc.projectId}] ${proj['ชื่อโครงการ']}` : `โครงการรหัส [${doc.projectId}]`;
+      }
+      
+      const date = new Date(doc.uploadDate).toLocaleDateString('th-TH') + ' ' + new Date(doc.uploadDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+      const iconClass = getFileIconClass(doc.name);
+      const iconStyle = getFileIconStyle(doc.name);
+
+      tr.innerHTML = `
+        <td>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <i class="${iconClass}" style="${iconStyle} font-size: 1.1rem;"></i>
+            <span style="font-weight: 500; white-space: normal; word-break: break-all;">${doc.name}</span>
+          </div>
+        </td>
+        <td style="white-space: normal; max-width: 280px; font-size: 0.85rem;">${projectName}</td>
+        <td>${formatBytes(doc.size)}</td>
+        <td style="font-size: 0.85rem; color: var(--text-secondary);">${date}</td>
+        <td style="text-align: center;">
+          <button class="btn-action-download" onclick="downloadDoc(${doc.id})" title="ดาวน์โหลดไฟล์"><i class="fa-solid fa-arrow-down-to-line"></i></button>
+          <button class="btn-action-delete" onclick="deleteDoc(${doc.id})" title="ลบไฟล์"><i class="fa-solid fa-trash-can"></i></button>
+        </td>
+      `;
+      tableBody.appendChild(tr);
+    });
+
+  } catch (error) {
+    console.error(error);
+    tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--danger);">ไม่สามารถโหลดรายการคลังเอกสารได้: ${error.message}</td></tr>`;
+  }
+}
+
+// Download File from IndexedDB Blob
+async function downloadDoc(id) {
+  try {
+    const allDocs = await getAllDocuments();
+    const doc = allDocs.find(d => d.id === id);
+    if (!doc) throw new Error('ไม่พบข้อมูลเอกสารในระบบ');
+    
+    // Create local object URL for download
+    const url = URL.createObjectURL(doc.blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = doc.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    alert('ดาวน์โหลดไฟล์ผิดพลาด: ' + error.message);
+  }
+}
+
+// Delete Document record
+async function deleteDoc(id) {
+  if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบเอกสารจัดซื้อจัดจ้างนี้ออกจากระบบแบบถาวร?')) return;
+  try {
+    await deleteDocument(id);
+    renderDocumentsList();
+  } catch (error) {
+    alert('ไม่สามารถลบเอกสารได้: ' + error.message);
+  }
+}
+
+// ==========================================
+// 📡 Google Sheet Data Load via JSONP
+// ==========================================
 function loadData() {
   const loadingScreen = document.getElementById('loading-screen');
   const dashboardContent = document.getElementById('dashboard-content');
@@ -140,7 +469,6 @@ function loadData() {
               item[colName] = parseFloat(cell.f.replace(/%/g, '').trim()) || 0;
             } else {
               let pVal = parseFloat(val) || 0;
-              // If entered as decimal percentage e.g. 0.1235 in sheet
               if (pVal > 0 && pVal <= 1) {
                 pVal = pVal * 100;
               }
@@ -165,6 +493,7 @@ function loadData() {
       renderKPIs(windowProjectData);
       renderCharts(windowProjectData);
       populateGroupFilter(windowProjectData);
+      populateUploadProjectSelect(windowProjectData);
       renderTable(windowProjectData);
       
       // Update last updated timestamp
@@ -194,7 +523,7 @@ function loadData() {
   // Add timestamp cache bust
   script.src = `${SPREADSHEET_JSONP_URL}&cache_bust=${Date.now()}`;
   
-  // Script loading error fallback (e.g., offline state)
+  // Script loading error fallback
   script.onerror = function() {
     handleError(new Error('ไม่สามารถดึงข้อมูลจาก Google Sheet ได้ โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ต และสถานะการแชร์ของชีต'));
     cleanup();
@@ -206,7 +535,7 @@ function loadData() {
     console.error(error);
     syncText.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color: var(--danger);"></i> เชื่อมต่อล้มเหลว';
     
-    // Display a beautiful error panel with retry button on the UI
+    // Display a beautiful error panel with retry button
     loadingScreen.innerHTML = `
       <div style="text-align: center; max-width: 480px; padding: 2.5rem; background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; box-shadow: var(--card-shadow);">
         <i class="fa-solid fa-triangle-exclamation" style="font-size: 3rem; color: var(--danger); margin-bottom: 1.25rem;"></i>
@@ -223,47 +552,22 @@ function loadData() {
   }
 }
 
-// Render KPI Cards
-function renderKPIs(data) {
-  const totalProjects = data.length;
+// Populate Project Dropdown in Upload Panel
+function populateUploadProjectSelect(data) {
+  const projectSelect = document.getElementById('doc-project-select');
+  projectSelect.innerHTML = '<option value="general">ทั่วไป (ไม่ระบุโครงการ)</option>';
   
-  let completed = 0;
-  let inProgress = 0;
-  let notStarted = 0;
-  let totalBudget = 0;
-  let totalSpent = 0;
-  
-  data.forEach(item => {
-    const status = item['สถานะ'];
-    if (status === 'ดำเนินการแล้ว') completed++;
-    else if (status === 'อยู่ระหว่างดำเนินการ') inProgress++;
-    else notStarted++;
-    
-    totalBudget += item['งบประมาณ'];
-    totalSpent += item['ใช้ไปแล้ว'];
+  data.forEach(proj => {
+    const option = document.createElement('option');
+    option.value = proj['รหัสโครงการ'];
+    option.textContent = `[${proj['รหัสโครงการ']}] ${proj['ชื่อโครงการ']}`;
+    projectSelect.appendChild(option);
   });
-  
-  const totalRemaining = totalBudget - totalSpent;
-  const spentPercent = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
-  const remainingPercent = totalBudget > 0 ? (totalRemaining / totalBudget) * 100 : 0;
-  
-  // Format currencies
-  const formatCurrency = (val) => '฿' + new Intl.NumberFormat('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
-  
-  // Set KPI values in DOM
-  document.getElementById('kpi-total-projects').textContent = totalProjects;
-  document.getElementById('kpi-project-split').textContent = `เสร็จสิ้น: ${completed} | ดำเนินการอยู่: ${inProgress} | ยังไม่เริ่ม: ${notStarted}`;
-  
-  document.getElementById('kpi-total-budget').textContent = formatCurrency(totalBudget);
-  
-  document.getElementById('kpi-total-spent').textContent = formatCurrency(totalSpent);
-  document.getElementById('kpi-spent-percent').textContent = `คิดเป็น ${spentPercent.toFixed(2)}% ของงบทั้งหมด`;
-  
-  document.getElementById('kpi-total-remaining').textContent = formatCurrency(totalRemaining);
-  document.getElementById('kpi-remaining-percent').textContent = `คงเหลือ ${remainingPercent.toFixed(2)}% สำหรับดำเนินงาน`;
 }
 
-// Render Chart.js
+// ==========================================
+// 📊 Charts and Tables Rendering
+// ==========================================
 function renderCharts(data) {
   // Check active theme colors
   const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
@@ -400,7 +704,7 @@ function renderCharts(data) {
   });
 }
 
-// Populate Department Filter Dropdown
+// Populate Department Filter Dropdown (Dashboard Tab)
 function populateGroupFilter(data) {
   const groupSelect = document.getElementById('group-filter');
   const selectedVal = groupSelect.value;
@@ -458,7 +762,7 @@ function renderTable(data) {
     let valA = a[currentSortField];
     let valB = b[currentSortField];
     
-    // Handle string sorting (case insensitive) vs numeric sorting
+    // Handle string sorting vs numeric sorting
     if (typeof valA === 'string') {
       valA = valA.toLowerCase();
       valB = valB.toLowerCase();
@@ -571,8 +875,8 @@ function updateSortIcons() {
   });
 }
 
-// Open Project Details Modal
-function openModal(project) {
+// Open Project Details Modal & Render Linked Documents
+async function openModal(project) {
   const formatCurrency = (val) => '฿' + new Intl.NumberFormat('th-TH', { minimumFractionDigits: 0 }).format(val);
   
   document.getElementById('modal-project-name').textContent = project['ชื่อโครงการ'];
@@ -636,6 +940,50 @@ function openModal(project) {
   // Set Legend texts
   document.getElementById('modal-spent-legend-text').textContent = `เบิกจ่ายแล้ว: ${formatCurrency(spent)} (${spentPercent.toFixed(1)}%)`;
   document.getElementById('modal-remain-legend-text').textContent = `งบประมาณคงเหลือ: ${formatCurrency(remaining)} (${remainingPercent.toFixed(1)}%)`;
+  
+  // ==========================================
+  // 📎 Render Project Documents in Modal
+  // ==========================================
+  const modalDocsList = document.getElementById('modal-docs-list');
+  modalDocsList.innerHTML = '<p style="font-size: 0.8rem; color: var(--text-secondary);"><i class="fa-solid fa-spinner spin"></i> กำลังโหลดข้อมูลเอกสาร...</p>';
+  
+  try {
+    const linkedDocs = await getDocumentsByProject(project['รหัสโครงการ']);
+    modalDocsList.innerHTML = '';
+    
+    if (linkedDocs.length === 0) {
+      modalDocsList.innerHTML = `
+        <p style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0;">
+          <i class="fa-solid fa-circle-info" style="opacity: 0.7;"></i> ไม่มีเอกสารจัดซื้อจัดจ้างที่เชื่อมโยงกับโครงการนี้
+        </p>
+      `;
+    } else {
+      linkedDocs.forEach(doc => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'modal-doc-item';
+        
+        const iconClass = getFileIconClass(doc.name);
+        const iconStyle = getFileIconStyle(doc.name);
+        
+        itemDiv.innerHTML = `
+          <div class="modal-doc-info">
+            <i class="${iconClass}" style="${iconStyle} font-size: 1rem;"></i>
+            <div style="display: flex; flex-direction: column;">
+              <span class="modal-doc-name" title="${doc.name}">${doc.name}</span>
+              <span class="modal-doc-size">${formatBytes(doc.size)}</span>
+            </div>
+          </div>
+          <button class="btn-action-download" style="margin-right: 0;" onclick="downloadDoc(${doc.id})" title="ดาวน์โหลดไฟล์">
+            <i class="fa-solid fa-arrow-down-to-line"></i>
+          </button>
+        `;
+        modalDocsList.appendChild(itemDiv);
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    modalDocsList.innerHTML = `<p style="font-size: 0.8rem; color: var(--danger);">ดาวน์โหลดข้อมูลเอกสารผิดพลาด: ${error.message}</p>`;
+  }
   
   // Show Modal
   document.getElementById('project-modal').classList.add('active');

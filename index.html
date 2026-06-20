@@ -54,10 +54,22 @@
     </div>
 
     <!-- Dashboard Content (hidden during initial load) -->
-    <div id="dashboard-content" class="dashboard-grid" style="display: none;">
+    <div id="dashboard-content" class="dashboard-grid" style="display: none; gap: 1.5rem;">
       
-      <!-- KPI Summary Cards Grid -->
-      <section class="kpi-grid">
+      <!-- Tab Controls -->
+      <div class="tabs-container">
+        <button id="tab-dashboard" class="tab-btn active">
+          <i class="fa-solid fa-chart-pie"></i> สถิติและแผนงานโครงการ
+        </button>
+        <button id="tab-documents" class="tab-btn">
+          <i class="fa-solid fa-file-invoice-dollar"></i> เอกสารจัดซื้อจัดจ้าง
+        </button>
+      </div>
+
+      <!-- Tab 1: Dashboard View -->
+      <div id="dashboard-view" class="tab-content active-content" style="width: 100%; display: flex; flex-direction: column; gap: 2rem;">
+        <!-- KPI Summary Cards Grid -->
+        <section class="kpi-grid">
         
         <!-- Total Projects Card -->
         <div class="kpi-card primary">
@@ -190,6 +202,71 @@
         </div>
 
       </section>
+      
+      </div> <!-- End dashboard-view -->
+
+      <!-- Tab 2: Documents View -->
+      <div id="documents-view" class="tab-content" style="display: none; width: 100%;">
+        <div class="docs-layout">
+          <!-- Left Column: Upload Panel -->
+          <div class="docs-upload-card">
+            <h3 class="docs-card-title"><i class="fa-solid fa-cloud-arrow-up"></i> อัปโหลดเอกสารจัดซื้อจัดจ้าง</h3>
+            <form id="doc-upload-form" class="upload-form" style="margin-top: 1.25rem;">
+              <div class="form-group">
+                <label class="form-label" for="doc-project-select">โครงการที่เกี่ยวข้อง</label>
+                <select id="doc-project-select" class="filter-select" style="width: 100%;" required>
+                  <option value="general">ทั่วไป (ไม่ระบุโครงการ)</option>
+                  <!-- Dynamically populated -->
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">เลือกไฟล์เอกสาร (PDF, Word, Excel, รูปภาพ)</label>
+                <div class="upload-dropzone" id="upload-dropzone">
+                  <i class="fa-solid fa-file-circle-plus dropzone-icon"></i>
+                  <span class="dropzone-text">ลากไฟล์มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</span>
+                  <span class="dropzone-subtext">ขนาดไฟล์สูงสุด 10 MB</span>
+                  <input type="file" id="doc-file-input" style="display: none;" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" required>
+                </div>
+                <div id="selected-file-info" class="selected-file-info" style="display: none;">
+                  <i class="fa-solid fa-file" id="selected-file-icon" style="color: var(--primary); margin-right: 0.5rem;"></i>
+                  <span id="selected-file-name" class="selected-file-name">filename.pdf</span>
+                  <button type="button" id="clear-file-btn" class="clear-file-btn"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 1rem;">
+                <i class="fa-solid fa-file-arrow-up"></i> บันทึกและอัปโหลดเอกสาร
+              </button>
+            </form>
+          </div>
+
+          <!-- Right Column: Document List -->
+          <div class="docs-list-card">
+            <div class="docs-card-header">
+              <h3 class="docs-card-title"><i class="fa-solid fa-folder-open"></i> รายการเอกสารจัดซื้อจัดจ้าง</h3>
+              <div class="search-wrapper" style="max-width: 250px;">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="doc-search-input" class="search-input" placeholder="ค้นหาเอกสาร...">
+              </div>
+            </div>
+            <div class="table-responsive" style="margin-top: 1rem;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ชื่อเอกสาร</th>
+                    <th>โครงการที่เกี่ยวข้อง</th>
+                    <th>ขนาดไฟล์</th>
+                    <th>วันที่อัปโหลด</th>
+                    <th style="text-align: center;">การจัดการ</th>
+                  </tr>
+                </thead>
+                <tbody id="docs-table-body">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
 
     </div>
 
@@ -260,6 +337,16 @@
               <span class="legend-color" style="background-color: var(--success);"></span>
               <span id="modal-remain-legend-text">คงเหลือ: ฿0 (100%)</span>
             </div>
+          </div>
+        </div>
+
+        <div class="modal-divider"></div>
+
+        <!-- Related Procurement Documents in Modal -->
+        <div class="modal-docs-section">
+          <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.75rem;"><i class="fa-solid fa-file-invoice-dollar"></i> เอกสารจัดซื้อจัดจ้างที่เกี่ยวข้อง</h4>
+          <div id="modal-docs-list" class="modal-docs-list">
+            <!-- Dynamically populated links -->
           </div>
         </div>
 
