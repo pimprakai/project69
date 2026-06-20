@@ -1,0 +1,13 @@
+# OS Files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Temporary files
+*.tmp
+*.log
+.gemini/
+.agents/
+walkthrough.md
+task.md
+implementation_plan.md
